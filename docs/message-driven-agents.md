@@ -18,10 +18,10 @@ The important runtime concepts are:
 - **Created agent**: runtime initializer created with `createAgent(...)`.
 - **Agent instance**: durable actor identified by `{ agentName, instanceId }`.
 - **Session**: isolated conversation/context stream inside one instance.
-- **Delivery**: normalized inbound event from an external channel.
+- **Channel event**: normalized inbound provider event emitted by a channel adapter.
 - **Dispatch**: one structured input accepted for one target agent instance/session.
 
-Agent modules default-export `createAgent(...)` so the runtime can initialize an instance when messages arrive. Use `receive(...)` only for external-channel delivery routing.
+Agent modules default-export `createAgent(...)` so the runtime can initialize an instance when messages arrive. For provider events, they import a channel and register top-level `channel.on(...)` listeners.
 
 ## Direct Attached Surfaces
 
@@ -47,7 +47,7 @@ Direct delivery:
 
 - targets one explicit agent module and instance id
 - initializes the instance through its default `createAgent(...)` export
-- bypasses `receive(...)`
+- bypasses channel listeners
 - bypasses `dispatch(...)`
 - can stream runtime events with HTTP `Accept: text/event-stream` or a WebSocket connection
 
@@ -93,110 +93,78 @@ socket.close();
 
 ## External Channels
 
-External channels receive provider events through routers that you mount in `app.ts`:
-
-```txt
-app.route('/webhooks/github', createGitHubChannelRouter())
-```
-
-For example, GitHub webhooks may use:
-
-```txt
-POST /webhooks/github
-```
-
-The connector verifies and normalizes the provider event into a `Delivery`:
+Provider adapters are discovered from `.flue/channels/*` or `channels/*`. A channel owns a Hono application, parses and verifies its transport input, and emits normalized typed events. Its application is mounted below `/channels/:name/*` through `flue()`:
 
 ```ts
-type Delivery = {
-  id: string;
-  channel: string;
-  type: string;
-  data: unknown;
-  occurredAt?: string;
-  raw?: unknown;
-};
+// .flue/channels/github.ts
+import { defineChannel } from '@flue/runtime';
+import { Hono } from 'hono';
+
+interface GitHubEvents {
+  issues: { deliveryId: string; payload: Record<string, any> };
+}
+interface GitHubThread {
+  channel: 'github';
+  deliveryId: string;
+}
+
+const app = new Hono();
+const github = defineChannel<GitHubEvents, GitHubThread>({ app });
+
+app.post('/events', async (c) => {
+  const event = await verifyAndParseGitHubWebhook(c.req.raw);
+  const result = await github.emit('issues', {
+    event,
+    thread: { channel: 'github', deliveryId: event.deliveryId },
+  });
+  return c.json({ accepted: true, ...result }, 202);
+});
+
+export default github;
 ```
 
-Channel connectors can live in a normal `.flue/channels.ts` module, and agent modules subscribe with a `channels` export:
-
-```ts
-// .flue/channels.ts
-import { createGitHubChannel } from '@flue/runtime/github';
-
-export const github = createGitHubChannel();
-```
+Agent modules import that singleton and own event interest and routing:
 
 ```ts
 // .flue/agents/github-triage.ts
-import { createAgent, defineAgentProfile, type ReceiveContext } from '@flue/runtime';
-import { github } from '../channels';
-
-export const channels = [github()];
+import { createAgent, defineAgentProfile, dispatch } from '@flue/runtime';
+import github from '../channels/github.ts';
 
 const triage = defineAgentProfile({
   model: 'anthropic/claude-haiku-4-5',
   instructions: 'You triage inbound GitHub webhook events.',
 });
+const agent = createAgent(() => ({ profile: triage }));
 
-export async function receive({ delivery, dispatch }: ReceiveContext) {
-  if (delivery.type !== 'issues') return;
+github.on('issues', async ({ event }) => {
+  const repository = event.payload.repository?.full_name;
+  const issue = event.payload.issue?.number;
+  if (typeof repository !== 'string' || typeof issue !== 'number') return;
 
-  const data = delivery.data as { payload?: Record<string, any>; action?: string };
-  const payload = data.payload ?? {};
-  const repository = payload.repository as Record<string, any> | undefined;
-  const issue = payload.issue as Record<string, any> | undefined;
-  if (typeof repository?.full_name !== 'string' || typeof issue?.number !== 'number') return;
-
-  await dispatch({
-    id: `repo:${repository.full_name}`,
-    session: `issue:${issue.number}`,
-    input: {
-      type: 'github.issue',
-      deliveryId: delivery.id,
-      action: data.action,
-      repository: repository.full_name,
-      issue: issue.number,
-      title: issue.title,
-      url: issue.html_url,
-    },
+  await dispatch(agent, {
+    id: `repo:${repository}`,
+    session: `issue:${issue}`,
+    input: { type: 'github.issue', deliveryId: event.deliveryId },
   });
-}
+});
 
-export default createAgent(() => ({ profile: triage }));
+export default agent;
 ```
 
 External-channel delivery:
 
-- fans out to every agent module subscribed to that channel
-- calls each subscribed module's `receive(...)`
-- lets `receive(...)` ignore, transform, or dispatch the delivery
+- invokes registered `channel.on(...)` listeners for that typed event
+- lets each listener ignore, transform, or explicitly `dispatch(...)` work
 - acknowledges webhook admission before model processing completes
 - does not imply any outbound provider action
 
-## `receive(...)`
+## `channel.on(...)`
 
-`receive(...)` is the routing hook for external channels.
-
-It should:
-
-- filter irrelevant deliveries
-- extract meaningful provider references
-- choose the target agent module when dispatching elsewhere
-- choose the target instance id
-- choose the target session id
-- shape narrow structured input for the model
-
-It should not:
-
-- initialize agent instances directly
-- act like a model turn
-- execute tools on behalf of the model
-- return an HTTP response to the provider
+`channel.on(...)` is the agent-owned routing hook for external provider events. It should filter events, extract references, choose a target instance/session, and shape narrow structured input for the agent.
 
 ## `dispatch(...)`
 
-Use `dispatch(...)` inside `receive(...)` to admit structured input into an agent session:
+Use `dispatch(...)` inside a channel listener to admit structured input into an agent session:
 
 ```ts
 await dispatch({
@@ -212,9 +180,9 @@ await dispatch({
 
 Fields:
 
-- `agent`: optional target agent module name; defaults to the current module
+- `agent`: target agent module name in the named overload; use `dispatch(createdAgent, request)` when a created-agent reference is available
 - `id`: target agent instance id
-- `session`: target session id
+- `session`: target session id; defaults to `default`
 - `input`: JSON-like structured payload
 
 `await dispatch(...)` means the input was accepted and queued for the target session according to the current runtime's guarantees. It does not mean the model finished processing, produced a reply, or completed tool calls.
@@ -244,99 +212,45 @@ For persistent agents, initialization is scoped only by stable `id`; message pay
 - `cwd`: session context root
 - `persist`: persistence control
 
-Dynamic per-delivery routing belongs in `receive(...)` before calling `dispatch(...)`.
+Dynamic per-event routing belongs in `channel.on(...)` before calling `dispatch(...)`.
 
 ## GitHub Webhooks
 
-Define the GitHub channel in `.flue/channels.ts`:
+See `examples/github-webhook/.flue/channels/github.ts` for an authored GitHub adapter that verifies `X-Hub-Signature-256`, parses inbound payloads, and emits typed events. It is discovered and mounted at:
 
-```ts
-import { createGitHubChannel } from '@flue/runtime/github';
-
-export const github = createGitHubChannel();
+```txt
+POST /channels/github/events
 ```
 
-Mount the GitHub router in `.flue/app.ts`:
-
-```ts
-import { flue } from '@flue/runtime/app';
-import { createGitHubChannelRouter } from '@flue/runtime/github';
-import { Hono } from 'hono';
-
-const app = new Hono();
-app.route('/', flue());
-app.route('/webhooks/github', createGitHubChannelRouter());
-
-export default app;
-```
-
-Then subscribe from an agent:
-
-```ts
-import { github } from '../channels';
-
-export const channels = [github()];
-```
-
-The route is whatever you mount in `app.ts`; the example above uses `/webhooks/github`.
-
-Set `GITHUB_WEBHOOK_SECRET` to verify `X-Hub-Signature-256` signatures:
-
-```bash
-GITHUB_WEBHOOK_SECRET="your-webhook-secret"
-```
-
-The normalized GitHub delivery preserves:
-
-- delivery id from `X-GitHub-Delivery`
-- event type from `X-GitHub-Event`
-- action when present
-- repository, sender, and installation objects when present
-- original parsed payload under `data.payload`
-- selected webhook headers and raw body under `raw`
-
-See `examples/github-webhook` for a complete inbound-only example.
+The example agent imports that channel, registers `github.on(...)` listeners, and explicitly dispatches accepted work. Set `GITHUB_WEBHOOK_SECRET` to enable signature verification.
 
 ## Cross-Channel Routing
 
-One delivery can dispatch zero, one, or many inputs. It can also dispatch to another agent module:
+A channel listener can dispatch zero, one, or many inputs, including to another agent module:
 
 ```ts
-export async function receive({ delivery, dispatch }: ReceiveContext) {
-  if (delivery.channel === 'discord' && delivery.type === 'message.created') {
-    const data = delivery.data as { guildId: string; caseId: string; message: unknown };
-
-    await dispatch({
-      id: `guild:${data.guildId}`,
-      session: `case:${data.caseId}`,
-      input: {
-        type: 'discord.message.flagged',
-        message: data.message,
-      },
-    });
-
-    await dispatch({
-      agent: 'audit',
-      id: `guild:${data.guildId}`,
-      session: `delivery:${delivery.id}`,
-      input: {
-        type: 'audit.delivery_seen',
-        deliveryId: delivery.id,
-      },
-    });
-  }
-}
+discord.on('message.created', async ({ event }) => {
+  await Promise.all([
+    dispatch(moderationAgent, {
+      id: `guild:${event.guildId}`,
+      session: `case:${event.caseId}`,
+      input: { type: 'discord.message.flagged', message: event.message },
+    }),
+    dispatch(auditAgent, {
+      id: `guild:${event.guildId}`,
+      session: `event:${event.id}`,
+      input: { type: 'audit.delivery_seen', eventId: event.id },
+    }),
+  ]);
+});
 ```
 
 The case/session model is application logic. For example, a moderation agent may choose `session = case:<caseId>` so Discord evidence and Google Chat reviewer discussion route into the same session.
-
-See `examples/cross-channel-routing` for a mock inbound routing example. It uses mock `discord` and `gchat` channel definitions because those real connectors are not implemented yet.
 
 ## Current Limitations
 
 - External-channel delivery is inbound-only.
 - There is no universal reply/thread abstraction yet.
-- Provider retries may produce duplicate deliveries; preserve provider ids in your input if idempotency matters.
-- Cloudflare external-channel dispatch processing is not durable yet and currently fails clearly for unsupported processing paths.
+- Provider retries may produce duplicate events; preserve provider ids in your input if idempotency matters.
 - The direct HTTP payload shape is provisional; WebSocket clients should use the published SDK/protocol surface.
 - When using a custom `app.ts`, protect every exposed agent/workflow WebSocket route with ordinary application middleware before mounting `flue()`; without a custom app, protect production socket routes upstream. Avoid middleware that mutates WebSocket upgrade response headers.
