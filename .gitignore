@@ -1,5 +1,7 @@
 # build output
 dist/
+.flue-vite/
+.flue-vite.wrangler.jsonc
 
 plans/
 

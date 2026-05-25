@@ -84,27 +84,27 @@ printf '\n.env\n' >> .gitignore
 
 Use the env var name your provider expects — `ANTHROPIC_API_KEY` for Anthropic, `OPENAI_API_KEY` for OpenAI, and so on. Do not commit `.env`.
 
-Pass the file explicitly with `--env <path>`. Flue loads it for both `flue dev` and `flue run` (the same flag works for Node and Cloudflare targets):
+For local Cloudflare development, put variables in `.dev.vars` or `.env` beside your `wrangler.jsonc`; the official Cloudflare Vite integration loads those files:
 
 ```bash
-npx flue dev --target cloudflare --env .env
+npx flue dev --target cloudflare
 ```
 
-For deploying, Wrangler reads the same file:
+Use `CLOUDFLARE_ENV=<name>` with `.dev.vars.<name>` or `.env.<name>` for environment-specific local values. For deploying, Wrangler reads the selected secrets file explicitly:
 
 ```bash
 npx flue build --target cloudflare
 npx wrangler deploy --secrets-file .env
 ```
 
-> **Note on `.dev.vars`.** Wrangler's docs use `.dev.vars` as the convention for local secrets. The format is identical to `.env`, and you can call your file whatever you like — Flue just needs a path. We use `.env` in these examples because it's the broader Node/Web convention and works the same way regardless of which target you're using.
+> **Note on local variables.** Cloudflare local development follows the official Vite/Workers `.dev.vars` and `.env` conventions; custom `flue dev --env <path>` files are supported for Node only.
 
 ### 5. Try it locally
 
-For local development, use `flue dev --target cloudflare`. It builds your project root, then starts a Cloudflare Workers dev server (via wrangler) on port 3583 and watches for changes:
+For local development, use `flue dev --target cloudflare`. It prepares your generated Worker topology, then starts the official Cloudflare Vite/workerd development server on port 3583:
 
 ```bash
-npx flue dev --target cloudflare --env .env
+npx flue dev --target cloudflare
 ```
 
 Then test it:
@@ -256,7 +256,7 @@ Add a Worker Loader binding and the R2 bucket to your project's `wrangler.jsonc`
 
 Worker Loader is currently in beta. If `wrangler dev` local mode does not simulate `worker_loaders`, use `wrangler dev --remote` or deploy to a preview environment.
 
-When you run `flue build --target cloudflare`, Flue merges its own Durable Object bindings into this file and writes the composed config to `dist/wrangler.jsonc`. `wrangler deploy` picks that up automatically via a redirect at `.wrangler/deploy/config.json` — so you can keep editing only your root `wrangler.jsonc` and bindings like this R2 binding will flow through to deploy. You don't need to set `main` yourself; Flue owns the bundle entrypoint.
+When you run `flue build --target cloudflare`, Flue merges its Durable Object bindings into an internal Vite input config and the official Cloudflare Vite plugin emits the deployable Worker output plus `.wrangler/deploy/config.json`. Keep editing only your root `wrangler.jsonc`; bindings like this R2 binding flow through to the built deployment. You do not need to set `main` yourself.
 
 Upload your knowledge base to R2 using Wrangler:
 
@@ -461,8 +461,8 @@ const { data } = await session.skill('greet', {
 Flue compiles your project into a deployable artifact. For Cloudflare, this means a Workers-compatible bundle:
 
 ```bash
-# Local development (build + watch + dev server on port 3583)
-npx flue dev --target cloudflare --env .env
+# Local development (official Vite/workerd dev server on port 3583)
+npx flue dev --target cloudflare
 
 # One-off build for Cloudflare
 npx flue build --target cloudflare

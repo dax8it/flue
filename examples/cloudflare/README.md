@@ -76,7 +76,7 @@ If you want to use different bucket names, edit `wrangler.jsonc` and the
 
 ```bash
 # Build + serve (one of these, depending on Loader access for the agent you want)
-pnpm exec flue dev --target cloudflare --env ../../.env
+pnpm exec flue dev --target cloudflare
 pnpm exec wrangler dev --remote                  # if needed for cf-shell agents
 
 # Trigger an agent

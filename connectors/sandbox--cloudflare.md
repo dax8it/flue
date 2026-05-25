@@ -127,9 +127,9 @@ The short version, for your reference:
    because Flue's SDK detects and adapts the `@cloudflare/sandbox` shape
    internally on the Cloudflare target.
 
-5. Tell the user to run `flue dev --target cloudflare --env .env` and
-   then `flue build --target cloudflare && wrangler deploy
-   --secrets-file .env` to deploy. No new env vars are required just for
+5. Tell the user to put local variables in `.dev.vars` or `.env` and run
+   `flue dev --target cloudflare`, then `flue build --target cloudflare &&
+   wrangler deploy --secrets-file .env` to deploy. No new env vars are required just for
    the sandbox itself; auth is the user's normal Cloudflare account auth
    via `wrangler login`.
 
