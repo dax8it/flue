@@ -133,7 +133,35 @@ export async function run({ init, payload }: FlueContext<{ incident: string }>) 
 }
 ```
 
-In addition to prompting, a session can run an available skill, delegate a task to a configured subagent, or execute a command that later agent work should know about. See [Prompting](/docs/guide/prompting/) for operation results, [Skills](/docs/guide/skills/) for reusable procedures, and [Subagents](/docs/guide/subagents/) for delegated work.
+In addition to prompting, a session can run an available skill, delegate a task to a configured subagent, or execute a command that later agent work should know about. See [Skills](/docs/guide/skills/) for reusable procedures and [Subagents](/docs/guide/subagents/) for delegated work.
+
+### Structured results
+
+When a workflow needs dependable application data rather than prose, provide a schema for the result. The agent must return data that satisfies the schema before the workflow receives it:
+
+```ts title="src/workflows/classify-ticket.ts"
+import { createAgent, type FlueContext } from '@flue/runtime';
+import * as v from 'valibot';
+
+const triage = createAgent(() => ({
+  model: 'anthropic/claude-sonnet-4-6',
+}));
+
+export async function run({ init, payload }: FlueContext<{ ticket: string }>) {
+  const harness = await init(triage);
+  const session = await harness.session();
+  const response = await session.prompt(payload.ticket, {
+    result: v.object({
+      priority: v.picklist(['low', 'medium', 'high']),
+      summary: v.string(),
+    }),
+  });
+
+  return response.data;
+}
+```
+
+Use structured results when later application code depends on specific fields, instead of parsing a textual answer. See the [Harness API](/docs/api/harness-api/) for result errors, operation options, and response types.
 
 ## Managing workflow runs
 
@@ -157,7 +185,7 @@ For event contents, structured logging, filtering, and telemetry export, see [Ob
 ## Next steps
 
 - [Agents](/docs/guide/building-agents/) — create and configure continuing agent instances.
-- [Prompting](/docs/guide/prompting/) — perform session operations and consume their results.
+- [Harness API](/docs/api/harness-api/) — look up session operations, structured results, and workspace methods.
 - [Tools](/docs/guide/tools/), [Skills](/docs/guide/skills/), and [Sandboxes](/docs/guide/sandboxes/) — configure what the agent in a workflow can do and where it works.
 - [Routing](/docs/guide/routing/) — expose workflows over HTTP or WebSockets and protect their endpoints.
 - [Observability](/docs/guide/observability/) — inspect run events and connect execution to monitoring and tracing tools.

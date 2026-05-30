@@ -299,4 +299,4 @@ Flue's MCP adapter does not auto-detect transports, start local stdio MCP proces
 | A specialist reused in several places | A profile with stable capability names | Operation-local tools for request-specific access only. |
 | An agent using a remote capability provider | `connectMcpServer(...)` in trusted code and guaranteed connection cleanup | Multiple MCP connections only after checking tool-name and authorization boundaries. |
 
-Continue with [Skills](/docs/guide/skills/) for instruction-driven capabilities, [Subagents](/docs/guide/subagents/) for delegated work, [Sandboxes](/docs/guide/sandboxes/) for execution boundaries, [Prompting](/docs/guide/prompting/) for operation options and results, and [Observability](/docs/guide/observability/) for tool event handling.
+Continue with [Skills](/docs/guide/skills/) for instruction-driven capabilities, [Subagents](/docs/guide/subagents/) for delegated work, [Sandboxes](/docs/guide/sandboxes/) for execution boundaries, the [Harness API](/docs/api/harness-api/) for operation options and results, and [Observability](/docs/guide/observability/) for tool event handling.

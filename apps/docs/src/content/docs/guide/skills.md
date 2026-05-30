@@ -24,7 +24,7 @@ This guide shows how to:
 4. Pass arguments and require structured results.
 5. Package supporting resources without unintentionally deploying secrets.
 
-See [Tools](/docs/guide/tools/) for executable capabilities, [Agents](/docs/guide/building-agents/) for runtime context discovery, [Workflows](/docs/guide/workflows/) for initialized environments and sessions, [Prompting](/docs/guide/prompting/) for operation results, and [Project Layout](/docs/guide/project-layout/) for authored modules versus runtime workspace context.
+See [Tools](/docs/guide/tools/) for executable capabilities, [Agents](/docs/guide/building-agents/) for runtime context discovery, [Workflows](/docs/guide/workflows/) for initialized environments and sessions, the [Harness API](/docs/api/harness-api/) for operation results, and [Project Layout](/docs/guide/project-layout/) for authored modules versus runtime workspace context.
 
 ## Choose workspace discovery or an imported skill
 
@@ -467,5 +467,5 @@ This arrangement keeps the reusable review process and its checklist together, w
 - [Agents](/docs/guide/building-agents/) — configure agents and understand runtime context discovery.
 - [Workflows](/docs/guide/workflows/) — initialize configured agents and use sessions during finite orchestration.
 - [Tools](/docs/guide/tools/) — provide executable, model-callable capabilities that skills may direct an agent to use.
-- [Prompting](/docs/guide/prompting/) — consume text, structured data, usage, models, and cancellation behavior from operations.
+- [Harness API](/docs/api/harness-api/) — look up text and structured operation results, model selection, usage, and cancellation.
 - [Project Layout](/docs/guide/project-layout/) — distinguish authored `.flue/` source from runtime workspace files and choose a source layout.
