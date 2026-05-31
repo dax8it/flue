@@ -319,7 +319,7 @@ Creates a new session. Defaults to `'default'`. Throws if it already exists.
 delete(name?: string): Promise<void>;
 ```
 
-Deletes a session's stored conversation state. Defaults to `'default'`. No-op when missing.
+Deletes a session's stored conversation state. Defaults to `'default'`. No-op when missing. Rejects if the open session has an active operation. Session-management requests for one name are applied in request order.
 
 ### `harness.shell(...)`
 
@@ -529,7 +529,7 @@ Triggers conversation compaction immediately. Resolves without work when there i
 delete(): Promise<void>;
 ```
 
-Deletes this session's stored conversation state.
+Deletes this session's stored conversation state. Rejects while an operation is active. Once deletion starts, the session is unusable and concurrent calls share the same deletion work.
 
 #### `CallHandle<T>`
 
