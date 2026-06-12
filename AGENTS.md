@@ -54,6 +54,10 @@ A single `review` task is enough review for most work. Additional reviews are al
 
 When writing new plans to disk, write them to `plans/` (gitignored intentionally) with a `YYYY-MM-DD` filename prefix.
 
+## Errors
+
+Throw structured error classes from `packages/runtime/src/errors.ts` rather than ad-hoc `new Error('[flue] ...')`. If no existing class fits, add one following the structured-constructor pattern: machine-readable fields in `details`, developer-only guidance (filesystem paths, setup mechanics) in `dev` — never in the caller-visible message. Consumers distinguish failures via `instanceof` checks against exported classes and structured fields; error message strings are not API, and tests should assert on class and structured data rather than message text.
+
 ## Testing
 
 Use `<package>/test/` for the intentional active suite and `<package>/test-legacy/` for archived tests. Do not add tests to `test-legacy/`, and do not use legacy tests as the source of truth when designing active coverage. Archived tests may remain wired to explicit integration scripts temporarily while equivalent intentional coverage is designed.
